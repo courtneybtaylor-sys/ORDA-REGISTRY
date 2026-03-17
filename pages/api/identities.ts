@@ -1,46 +1,104 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/lib/db/supabase';
-import type { Identity, ApiResponse } from '@/lib/types';
+import {
+  applyCorsHeaders,
+  handleCorsPreFlight,
+  applyCachingHeaders,
+  logRequest,
+  sanitizeParam,
+  createErrorResponse,
+  createSuccessResponse,
+} from '@/lib/middleware';
+import type { Identity, ApiResponse, PaginatedResponse } from '@/lib/types';
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<ApiResponse<Identity[]>>
+  res: NextApiResponse<ApiResponse<PaginatedResponse<Identity>>>
 ) {
+  applyCorsHeaders(res);
+  const startTime = Date.now();
+
+  if (handleCorsPreFlight(req, res)) {
+    return;
+  }
+
   if (req.method !== 'GET') {
-    return res.status(405).json({
-      success: false,
-      error: 'Method not allowed',
-    });
+    logRequest(req, 405, Date.now() - startTime);
+    return res.status(405).json(
+      createErrorResponse(405, 'Method not allowed')
+    );
   }
 
   try {
-    const { page = '1', limit = '20' } = req.query;
-    const pageNum = Math.max(1, parseInt(page as string) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
+    const pageNum = Math.max(
+      1,
+      (sanitizeParam(req.query.page, 'number') as number) || 1
+    );
+    const limitNum = Math.min(
+      100,
+      Math.max(1, (sanitizeParam(req.query.limit, 'number') as number) || 20)
+    );
+    const jurisdiction = sanitizeParam(req.query.jurisdiction, 'string') as string | null;
+    const status = sanitizeParam(req.query.status, 'string') as string | null;
+    const product = sanitizeParam(req.query.product, 'string') as string | null;
+
     const offset = (pageNum - 1) * limitNum;
 
-    const { data, error } = await supabase
-      .from('identities')
-      .select('*')
-      .range(offset, offset + limitNum - 1);
+    // Build query with filters
+    let query = supabase.from('identities').select('*', { count: 'exact' });
 
-    if (error) {
-      return res.status(500).json({
-        success: false,
-        error: error.message,
-      });
+    if (jurisdiction) {
+      query = query.eq('jurisdiction', jurisdiction);
     }
 
-    return res.status(200).json({
-      success: true,
-      data: data || [],
-      message: `Retrieved ${data?.length || 0} identities`,
-    });
+    if (status && ['active', 'inactive', 'pending'].includes(status)) {
+      query = query.eq('status', status);
+    }
+
+    if (product) {
+      query = query.eq('product', product);
+    }
+
+    const { data, error, count } = await query.range(
+      offset,
+      offset + limitNum - 1
+    );
+
+    if (error) {
+      logRequest(req, 500, Date.now() - startTime);
+      return res.status(500).json(
+        createErrorResponse(500, 'Database error', error.message)
+      );
+    }
+
+    const totalCount = count || 0;
+    const totalPages = Math.ceil(totalCount / limitNum);
+
+    // Apply public cache headers for identities list
+    applyCachingHeaders(res, 'public', 300);
+    logRequest(req, 200, Date.now() - startTime);
+
+    return res.status(200).json(
+      createSuccessResponse(
+        {
+          items: data || [],
+          totalCount,
+          page: pageNum,
+          limit: limitNum,
+          totalPages,
+        },
+        `Retrieved ${data?.length || 0} identities`
+      )
+    );
   } catch (error) {
-    console.error('Error fetching identities:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-    });
+    const duration = Date.now() - startTime;
+    logRequest(req, 500, duration, error as Error);
+    return res.status(500).json(
+      createErrorResponse(
+        500,
+        'Internal server error',
+        (error as Error).message
+      )
+    );
   }
 }
