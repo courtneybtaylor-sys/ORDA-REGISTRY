@@ -1,18 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/lib/db/supabase';
+import {
+  applyCorsHeaders,
+  handleCorsPreFlight,
+  applyCachingHeaders,
+  logRequest,
+  createErrorResponse,
+  createSuccessResponse,
+} from '@/lib/middleware';
 import type { Testament, ApiResponse } from '@/lib/types';
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<ApiResponse<Testament | Testament[]>>
+  res: NextApiResponse<ApiResponse<Testament>>
 ) {
+  applyCorsHeaders(res);
+  const startTime = Date.now();
+
+  if (handleCorsPreFlight(req, res)) {
+    return;
+  }
+
   const { id } = req.query;
 
   if (!id || typeof id !== 'string') {
-    return res.status(400).json({
-      success: false,
-      error: 'Testament ID is required',
-    });
+    logRequest(req, 400, Date.now() - startTime);
+    return res.status(400).json(
+      createErrorResponse(400, 'Testament ID is required')
+    );
   }
 
   if (req.method === 'GET') {
@@ -24,27 +39,32 @@ export default async function handler(
         .single();
 
       if (error) {
-        return res.status(404).json({
-          success: false,
-          error: 'Testament not found',
-        });
+        logRequest(req, 404, Date.now() - startTime);
+        return res.status(404).json(
+          createErrorResponse(404, 'Testament not found')
+        );
       }
 
-      return res.status(200).json({
-        success: true,
-        data,
-      });
+      // Apply immutable cache headers for testaments
+      applyCachingHeaders(res, 'immutable', 31536000);
+      logRequest(req, 200, Date.now() - startTime);
+
+      return res.status(200).json(createSuccessResponse(data));
     } catch (error) {
-      console.error('Error fetching testament:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error',
-      });
+      const duration = Date.now() - startTime;
+      logRequest(req, 500, duration, error as Error);
+      return res.status(500).json(
+        createErrorResponse(
+          500,
+          'Internal server error',
+          (error as Error).message
+        )
+      );
     }
   }
 
-  return res.status(405).json({
-    success: false,
-    error: 'Method not allowed',
-  });
+  logRequest(req, 405, Date.now() - startTime);
+  return res.status(405).json(
+    createErrorResponse(405, 'Method not allowed')
+  );
 }
