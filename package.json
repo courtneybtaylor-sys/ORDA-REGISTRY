@@ -1,31 +1,23 @@
 {
   "name": "orda-registry",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "ORDA Real Testament Anchoring with Public Verification",
+  "main": "lib/index.ts",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "test": "jest",
+    "test:integration": "jest __tests__/integration",
+    "test:orda": "jest __tests__/integration/orda-live-api.test.ts",
+    "build": "tsc",
+    "dev": "ts-node src/index.ts"
   },
   "dependencies": {
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "next": "16.0.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "typescript": "^5.6.2"
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.0.0",
-    "eslint-config-next": "16.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.10.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
   }
 }
