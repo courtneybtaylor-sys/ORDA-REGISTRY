@@ -4,7 +4,7 @@
 
 export { OrdaClient } from './orda/orda-client';
 export { AmaraAgentVoiceEnabled } from './agents/amara-agent-voice-enabled';
-export {
+export type {
   Testament,
   TestamentPayload,
   Gates,

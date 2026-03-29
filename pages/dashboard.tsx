@@ -10,7 +10,7 @@ export default function Dashboard() {
       try {
         const response = await fetch('/api/metrics');
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json() as { data: Metric };
           setMetrics(data.data);
         }
       } catch (error) {
