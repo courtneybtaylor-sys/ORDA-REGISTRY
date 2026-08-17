@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Metric } from '@/lib/types';
+import ComplianceBar from '@/components/ComplianceBar';
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<Metric | null>(null);
@@ -24,11 +25,11 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
+    <main className="container">
       <h1>Registry Dashboard</h1>
 
       <nav style={{ marginBottom: '2rem' }}>
-        <a href="/" style={{ marginRight: '1rem' }}>← Back to Home</a>
+        <a href="/">&larr; Back to Home</a>
       </nav>
 
       {loading ? (
@@ -42,52 +43,30 @@ export default function Dashboard() {
               gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
               gap: '1.5rem'
             }}>
-              <div style={{
-                border: '2px solid #007bff',
-                borderRadius: '8px',
-                padding: '1.5rem',
-                textAlign: 'center'
-              }}>
-                <h3 style={{ margin: '0 0 0.5rem 0' }}>Total Identities</h3>
-                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '0' }}>
+              <div className="card" style={{ maxWidth: 'none', textAlign: 'center' }}>
+                <p className="ui-label">Total Identities</p>
+                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--secondary-indigo)' }}>
                   {metrics.totalIdentities}
                 </p>
               </div>
 
-              <div style={{
-                border: '2px solid #28a745',
-                borderRadius: '8px',
-                padding: '1.5rem',
-                textAlign: 'center'
-              }}>
-                <h3 style={{ margin: '0 0 0.5rem 0' }}>Total Testaments</h3>
-                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '0' }}>
+              <div className="card" style={{ maxWidth: 'none', textAlign: 'center' }}>
+                <p className="ui-label">Total Testaments</p>
+                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--secondary-indigo)' }}>
                   {metrics.totalTestaments}
                 </p>
               </div>
 
-              <div style={{
-                border: '2px solid #ffc107',
-                borderRadius: '8px',
-                padding: '1.5rem',
-                textAlign: 'center'
-              }}>
-                <h3 style={{ margin: '0 0 0.5rem 0' }}>Active Testaments</h3>
-                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '0' }}>
+              <div className="card" style={{ maxWidth: 'none', textAlign: 'center' }}>
+                <p className="ui-label">Active Testaments</p>
+                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--secondary-indigo)' }}>
                   {metrics.activeTestaments}
                 </p>
               </div>
 
-              <div style={{
-                border: '2px solid #dc3545',
-                borderRadius: '8px',
-                padding: '1.5rem',
-                textAlign: 'center'
-              }}>
-                <h3 style={{ margin: '0 0 0.5rem 0' }}>Compliance Score</h3>
-                <p style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '0' }}>
-                  {metrics.complianceScore}%
-                </p>
+              <div className="card" style={{ maxWidth: 'none', textAlign: 'center' }}>
+                <p className="ui-label">Compliance Score</p>
+                <ComplianceBar score={metrics.complianceScore} />
               </div>
             </div>
           </section>

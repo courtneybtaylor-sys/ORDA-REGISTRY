@@ -26,7 +26,13 @@ export interface Identity {
 export interface Testament {
   id: string;
   identityId: string;
-  content: string;
+  actionType: string;
+  actionHash: string;
+  outputHash: string;
+  gateResults: GateResults;
+  seSignature: string;
+  jurisdiction?: string;
+  anchoredAt?: string;
   timestamp: string;
   isActive: boolean;
   createdAt: string;

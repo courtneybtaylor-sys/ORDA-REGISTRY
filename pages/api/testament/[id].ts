@@ -14,17 +14,13 @@ function mapTestamentRow(row: any): Testament {
   return {
     id: row.testament_id,
     identityId: row.operator_did,
-    content: JSON.stringify(
-      {
-        actionType: row.action_type,
-        actionHash: row.action_hash,
-        outputHash: row.output_hash,
-        gateResults: row.gate_results,
-        seSignature: row.se_signature,
-      },
-      null,
-      2
-    ),
+    actionType: row.action_type,
+    actionHash: row.action_hash,
+    outputHash: row.output_hash,
+    gateResults: row.gate_results || {},
+    seSignature: row.se_signature,
+    jurisdiction: row.jurisdiction?.[0],
+    anchoredAt: row.anchored_at,
     timestamp: row.timestamp,
     isActive: row.dissolution_status === null,
     createdAt: row.created_at,

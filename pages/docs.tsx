@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function ApiDocs() {
   return (
-    <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
+    <main className="container" style={{ maxWidth: '1000px' }}>
       <h1>API Documentation</h1>
 
       <nav style={{ marginBottom: '2rem' }}>

@@ -106,11 +106,13 @@ export default async function handler(
         {
           id: data.testament_id,
           identityId: data.operator_did,
-          content: JSON.stringify(
-            { actionType: data.action_type, gateResults: data.gate_results },
-            null,
-            2
-          ),
+          actionType: data.action_type,
+          actionHash: data.action_hash,
+          outputHash: data.output_hash,
+          gateResults: data.gate_results || {},
+          seSignature: data.se_signature,
+          jurisdiction: data.jurisdiction?.[0],
+          anchoredAt: data.anchored_at,
           timestamp: data.timestamp,
           isActive: data.dissolution_status === null,
           createdAt: data.created_at,

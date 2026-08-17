@@ -13,7 +13,7 @@ export default function IdentitiesPage() {
         const response = await fetch(`/api/identities?page=${page}&limit=20`);
         if (response.ok) {
           const data = await response.json();
-          setIdentities(data.data || []);
+          setIdentities(data.data?.items || []);
         }
       } catch (error) {
         console.error('Error fetching identities:', error);
@@ -26,11 +26,11 @@ export default function IdentitiesPage() {
   }, [page]);
 
   return (
-    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
+    <main className="container">
       <h1>Identity Ledger</h1>
 
       <nav style={{ marginBottom: '2rem' }}>
-        <a href="/" style={{ marginRight: '1rem' }}>← Back to Home</a>
+        <a href="/">&larr; Back to Home</a>
       </nav>
 
       {loading ? (
@@ -39,20 +39,20 @@ export default function IdentitiesPage() {
         <div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ backgroundColor: '#f0f0f0', borderBottom: '2px solid #333' }}>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>ID</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Name</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Email</th>
-                <th style={{ padding: '0.75rem', textAlign: 'center' }}>Testaments</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Created</th>
+              <tr style={{ backgroundColor: 'var(--bg-light)', borderBottom: '2px solid var(--secondary-indigo)' }}>
+                <th className="ui-label" style={{ padding: '0.75rem', textAlign: 'left' }}>DID</th>
+                <th className="ui-label" style={{ padding: '0.75rem', textAlign: 'left' }}>Name</th>
+                <th className="ui-label" style={{ padding: '0.75rem', textAlign: 'left' }}>Jurisdiction</th>
+                <th className="ui-label" style={{ padding: '0.75rem', textAlign: 'center' }}>Testaments</th>
+                <th className="ui-label" style={{ padding: '0.75rem', textAlign: 'left' }}>Created</th>
               </tr>
             </thead>
             <tbody>
               {identities.map((identity) => (
                 <tr key={identity.id} style={{ borderBottom: '1px solid #ddd' }}>
-                  <td style={{ padding: '0.75rem' }}>{identity.id}</td>
+                  <td className="mono" style={{ padding: '0.75rem' }}>{identity.operatorDid}</td>
                   <td style={{ padding: '0.75rem' }}>{identity.name}</td>
-                  <td style={{ padding: '0.75rem' }}>{identity.email || '-'}</td>
+                  <td style={{ padding: '0.75rem' }}>{identity.jurisdiction || '-'}</td>
                   <td style={{ padding: '0.75rem', textAlign: 'center' }}>{identity.testamentCount}</td>
                   <td style={{ padding: '0.75rem' }}>
                     {new Date(identity.createdAt).toLocaleDateString()}
@@ -66,7 +66,7 @@ export default function IdentitiesPage() {
             <button
               onClick={() => setPage(Math.max(1, page - 1))}
               disabled={page === 1}
-              style={{ padding: '0.5rem 1rem' }}
+              className="btn btn-secondary"
             >
               Previous
             </button>
@@ -74,7 +74,7 @@ export default function IdentitiesPage() {
             <button
               onClick={() => setPage(page + 1)}
               disabled={identities.length < 20}
-              style={{ padding: '0.5rem 1rem' }}
+              className="btn btn-secondary"
             >
               Next
             </button>
