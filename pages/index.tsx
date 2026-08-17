@@ -85,6 +85,7 @@ export default function Home() {
           <li><a href="/dashboard">Dashboard</a></li>
           <li><a href="/identities">Identities</a></li>
           <li><a href="/docs">API Documentation</a></li>
+          <li><a href="/said-aiot">SAID-AIoT Status</a></li>
         </ul>
       </nav>
     </main>
