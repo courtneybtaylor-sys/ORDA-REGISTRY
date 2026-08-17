@@ -28,7 +28,6 @@ export default async function handler(
     );
   }
 
-  // Validate API key for internal endpoint
   if (!validateApiKey(req)) {
     logRequest(req, 401, Date.now() - startTime);
     return res.status(401).json(
@@ -41,88 +40,55 @@ export default async function handler(
 
   const body: TestamentLogRequest = req.body;
 
-  // Validate required fields
-  if (!body.actorDid || !body.gatesEvaluation || !Array.isArray(body.gatesEvaluation)) {
+  const requiredFields: (keyof TestamentLogRequest)[] = [
+    'testamentId',
+    'agentDid',
+    'deviceDid',
+    'operatorDid',
+    'actionType',
+    'actionHash',
+    'outputHash',
+    'gateResults',
+    'timestamp',
+    'seSignature',
+  ];
+  const missingFields = requiredFields.filter((field) => !body[field]);
+
+  if (missingFields.length > 0) {
     logRequest(req, 400, Date.now() - startTime);
     return res.status(400).json(
       createErrorResponse(
         400,
         'Missing required fields',
-        'Required: actorDid, gatesEvaluation (array), timestamp'
+        `Required: ${missingFields.join(', ')}`
       )
     );
   }
 
-  // Validate gates evaluation
-  if (body.gatesEvaluation.length !== 7) {
+  if (typeof body.gateResults !== 'object' || Object.keys(body.gateResults).length === 0) {
     logRequest(req, 400, Date.now() - startTime);
     return res.status(400).json(
-      createErrorResponse(
-        400,
-        'Invalid gates evaluation',
-        'Exactly 7 gate evaluations required'
-      )
+      createErrorResponse(400, 'Invalid gateResults', 'Must be a non-empty object of gate -> boolean')
     );
-  }
-
-  // Validate each gate evaluation
-  const validGates = [
-    'identity_verification',
-    'credential_validation',
-    'hardware_security',
-    'data_integrity',
-    'audit_compliance',
-    'governance_framework',
-    'regulatory_approval',
-  ];
-
-  for (const gate of body.gatesEvaluation) {
-    if (!validGates.includes(gate.gate)) {
-      logRequest(req, 400, Date.now() - startTime);
-      return res.status(400).json(
-        createErrorResponse(400, 'Invalid gate type', `Unknown gate: ${gate.gate}`)
-      );
-    }
-
-    if (typeof gate.score !== 'number' || gate.score < 0 || gate.score > 100) {
-      logRequest(req, 400, Date.now() - startTime);
-      return res.status(400).json(
-        createErrorResponse(400, 'Invalid gate score', 'Score must be between 0 and 100')
-      );
-    }
-
-    if (typeof gate.passed !== 'boolean') {
-      logRequest(req, 400, Date.now() - startTime);
-      return res.status(400).json(
-        createErrorResponse(400, 'Invalid gate passed field', 'Must be boolean')
-      );
-    }
   }
 
   try {
-    // Calculate overall score (average of all gate scores)
-    const overallScore = Math.round(
-      body.gatesEvaluation.reduce((sum, g) => sum + g.score, 0) / body.gatesEvaluation.length
-    );
-
-    // Determine NIST compliance (all gates must be passed and score >= 80)
-    const nistCompliant = body.gatesEvaluation.every(g => g.passed) && overallScore >= 80;
-
-    const testament = {
-      actor_did: body.actorDid,
-      timestamp: body.timestamp,
-      is_active: true,
-      gates_evaluation: JSON.stringify(body.gatesEvaluation),
-      overall_score: overallScore,
-      jurisdiction: body.jurisdiction || null,
-      nist_compliant: nistCompliant,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
     const { data, error } = await supabaseAdmin
       .from('testaments')
-      .insert([testament])
+      .insert([{
+        testament_id: body.testamentId,
+        agent_did: body.agentDid,
+        device_did: body.deviceDid,
+        operator_did: body.operatorDid,
+        passport_id: body.passportId || null,
+        action_type: body.actionType,
+        action_hash: body.actionHash,
+        output_hash: body.outputHash,
+        gate_results: body.gateResults,
+        timestamp: body.timestamp,
+        se_signature: body.seSignature,
+        jurisdiction: body.jurisdiction || null,
+      }])
       .select()
       .single();
 
@@ -137,7 +103,19 @@ export default async function handler(
 
     return res.status(201).json(
       createSuccessResponse(
-        data,
+        {
+          id: data.testament_id,
+          identityId: data.operator_did,
+          content: JSON.stringify(
+            { actionType: data.action_type, gateResults: data.gate_results },
+            null,
+            2
+          ),
+          timestamp: data.timestamp,
+          isActive: data.dissolution_status === null,
+          createdAt: data.created_at,
+          updatedAt: data.created_at,
+        },
         'Testament logged successfully'
       )
     );

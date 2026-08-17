@@ -1,53 +1,36 @@
 /**
  * ORDA Registry Type Definitions
+ *
+ * View-model shapes consumed by the Next.js pages. API route handlers map
+ * the real SAID-AIoT Supabase schema (operators/agents/devices/
+ * capability_passports/testaments) into these shapes.
  */
 
-// Gate evaluation types (7 gates)
-export type GateType =
-  | 'identity_verification'
-  | 'credential_validation'
-  | 'hardware_security'
-  | 'data_integrity'
-  | 'audit_compliance'
-  | 'governance_framework'
-  | 'regulatory_approval';
+// Flexible gate result map (Postgres jsonb column). Real values observed in
+// production are status strings like "pass" / "stamp", not plain booleans,
+// so callers should use isGatePassed() from lib/gate-results rather than
+// assuming a boolean.
+export type GateResults = Record<string, boolean | string | number>;
 
-export interface GateEvaluation {
-  gate: GateType;
-  passed: boolean;
-  score: number; // 0-100
-  details: string;
-  evaluatedAt: string;
-  evidence?: string;
+export interface Identity {
+  id: string;
+  operatorDid: string;
+  name: string;
+  email?: string;
+  jurisdiction?: string;
+  createdAt: string;
+  updatedAt: string;
+  testamentCount: number;
 }
 
 export interface Testament {
   id: string;
   identityId: string;
-  actorDid: string;
   content: string;
   timestamp: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  gatesEvaluation: GateEvaluation[];
-  overallScore: number;
-  jurisdiction?: string;
-  nistCompliant: boolean;
-}
-
-export interface Identity {
-  id: string;
-  publicKey: string;
-  name: string;
-  type: 'ai_agent' | 'person' | 'enterprise';
-  email?: string;
-  jurisdiction?: string;
-  status: 'active' | 'inactive' | 'pending';
-  product?: string;
-  createdAt: string;
-  updatedAt: string;
-  testamentCount: number;
 }
 
 export interface Metric {
@@ -57,23 +40,6 @@ export interface Metric {
   complianceScore: number;
   averageNistCompliance: number;
   lastUpdated: string;
-}
-
-export interface MetricsBreakdown {
-  registryHealth: {
-    totalIdentities: number;
-    totalTestaments: number;
-    activeTestaments: number;
-    overallComplianceScore: number;
-  };
-  byJurisdiction?: Record<string, {
-    testamentCount: number;
-    complianceScore: number;
-  }>;
-  byProduct?: Record<string, {
-    testamentCount: number;
-    complianceScore: number;
-  }>;
 }
 
 export interface ComplianceRecord {
@@ -94,22 +60,22 @@ export interface ComplianceProof {
   hardwareVerified: boolean;
   regulatoryReady: boolean;
   jurisdiction: string;
-  details: {
-    [key in GateType]?: {
-      passed: boolean;
-      score: number;
-      details: string;
-    };
-  };
+  gateResults: GateResults;
 }
 
 export interface TestamentLogRequest {
-  testamentId?: string;
-  actorDid: string;
-  gatesEvaluation: GateEvaluation[];
+  testamentId: string;
+  agentDid: string;
+  deviceDid: string;
+  operatorDid: string;
+  passportId?: string;
+  actionType: string;
+  actionHash: string;
+  outputHash: string;
+  gateResults: GateResults;
   timestamp: string;
-  jurisdiction?: string;
-  nistCompliant?: boolean;
+  seSignature: string;
+  jurisdiction?: string[];
 }
 
 export interface ApiResponse<T> {

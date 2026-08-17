@@ -9,11 +9,19 @@ import {
   createErrorResponse,
   createSuccessResponse,
 } from '@/lib/middleware';
-import type { MetricsBreakdown, ApiResponse } from '@/lib/types';
+import type { Metric, ApiResponse, GateResults } from '@/lib/types';
+import { summarizeGateResults } from '@/lib/gate-results';
+
+function complianceFromGateResults(gateResults: GateResults | null): number | null {
+  if (!gateResults) return null;
+  const { gatesEvaluated, gatesPassed } = summarizeGateResults(gateResults);
+  if (gatesEvaluated === 0) return null;
+  return (gatesPassed / gatesEvaluated) * 100;
+}
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<ApiResponse<MetricsBreakdown>>
+  res: NextApiResponse<ApiResponse<Metric>>
 ) {
   applyCorsHeaders(res);
   const startTime = Date.now();
@@ -31,9 +39,7 @@ export default async function handler(
 
   try {
     const timeframe = (sanitizeParam(req.query.timeframe, 'string') as string) || '30d';
-    const groupBy = (sanitizeParam(req.query.groupBy, 'string') as string) || '';
 
-    // Validate timeframe
     const validTimeframes = ['30d', '60d', '90d'];
     if (!validTimeframes.includes(timeframe)) {
       logRequest(req, 400, Date.now() - startTime);
@@ -42,121 +48,65 @@ export default async function handler(
       );
     }
 
-    // Calculate date range
     const now = new Date();
     const days = parseInt(timeframe);
     const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-    // Fetch total identities
-    const { count: identityCount } = await supabase
-      .from('identities')
+    const { count: totalIdentities, error: identitiesError } = await supabase
+      .from('operators')
       .select('*', { count: 'exact', head: true });
 
-    // Fetch total testaments
-    const { count: testamentCount } = await supabase
+    if (identitiesError) {
+      logRequest(req, 500, Date.now() - startTime);
+      return res.status(500).json(
+        createErrorResponse(500, 'Database error', identitiesError.message)
+      );
+    }
+
+    const { count: totalTestaments, error: testamentsError } = await supabase
       .from('testaments')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', startDate.toISOString());
 
-    // Fetch active testaments
-    const { count: activeCount } = await supabase
+    if (testamentsError) {
+      logRequest(req, 500, Date.now() - startTime);
+      return res.status(500).json(
+        createErrorResponse(500, 'Database error', testamentsError.message)
+      );
+    }
+
+    const { count: activeTestaments } = await supabase
       .from('testaments')
       .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
+      .is('dissolution_status', null)
       .gte('created_at', startDate.toISOString());
 
-    // Calculate average compliance
-    const { data: testaments } = await supabase
+    const { data: gateResultRows } = await supabase
       .from('testaments')
-      .select('overall_score')
+      .select('gate_results')
       .gte('created_at', startDate.toISOString());
 
-    const avgCompliance = testaments && testaments.length > 0
-      ? testaments.reduce((sum: number, t: any) => sum + (t.overall_score || 0), 0) / testaments.length
+    const scores = (gateResultRows || [])
+      .map((row: any) => complianceFromGateResults(row.gate_results))
+      .filter((score): score is number => score !== null);
+
+    const complianceScore = scores.length > 0
+      ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
       : 0;
 
-    const metricsBreakdown: MetricsBreakdown = {
-      registryHealth: {
-        totalIdentities: identityCount || 0,
-        totalTestaments: testamentCount || 0,
-        activeTestaments: activeCount || 0,
-        overallComplianceScore: Math.round(avgCompliance),
-      },
+    const metric: Metric = {
+      totalIdentities: totalIdentities || 0,
+      totalTestaments: totalTestaments || 0,
+      activeTestaments: activeTestaments || 0,
+      complianceScore,
+      averageNistCompliance: complianceScore,
+      lastUpdated: new Date().toISOString(),
     };
 
-    // Add breakdown by jurisdiction if requested
-    if (groupBy === 'jurisdiction') {
-      const { data: testamentsByJurisdiction } = await supabase
-        .from('testaments')
-        .select('jurisdiction, overall_score')
-        .gte('created_at', startDate.toISOString());
-
-      const byJurisdiction: Record<string, { testamentCount: number; complianceScore: number }> = {};
-
-      testamentsByJurisdiction?.forEach((t: any) => {
-        const jurisdiction = t.jurisdiction || 'Unknown';
-        if (!byJurisdiction[jurisdiction]) {
-          byJurisdiction[jurisdiction] = { testamentCount: 0, complianceScore: 0 };
-        }
-        byJurisdiction[jurisdiction].testamentCount++;
-        byJurisdiction[jurisdiction].complianceScore += t.overall_score || 0;
-      });
-
-      // Calculate average scores
-      Object.keys(byJurisdiction).forEach((jurisdiction) => {
-        const count = byJurisdiction[jurisdiction].testamentCount;
-        byJurisdiction[jurisdiction].complianceScore = Math.round(
-          byJurisdiction[jurisdiction].complianceScore / count
-        );
-      });
-
-      metricsBreakdown.byJurisdiction = byJurisdiction;
-    }
-
-    // Add breakdown by product if requested
-    if (groupBy === 'product') {
-      const { data: identitiesByProduct } = await supabase
-        .from('identities')
-        .select('product, id')
-        .not('product', 'is', null);
-
-      const { data: testamentsByProduct } = await supabase
-        .from('testaments')
-        .select('identity_id, overall_score')
-        .gte('created_at', startDate.toISOString());
-
-      const byProduct: Record<string, { testamentCount: number; complianceScore: number }> = {};
-
-      // Map testaments to products via identity
-      testamentsByProduct?.forEach((t: any) => {
-        const identity = identitiesByProduct?.find(
-          (id: any) => id.id === t.identity_id
-        );
-        if (identity?.product) {
-          if (!byProduct[identity.product]) {
-            byProduct[identity.product] = { testamentCount: 0, complianceScore: 0 };
-          }
-          byProduct[identity.product].testamentCount++;
-          byProduct[identity.product].complianceScore += t.overall_score || 0;
-        }
-      });
-
-      // Calculate average scores
-      Object.keys(byProduct).forEach((product) => {
-        const count = byProduct[product].testamentCount;
-        byProduct[product].complianceScore = Math.round(
-          byProduct[product].complianceScore / count
-        );
-      });
-
-      metricsBreakdown.byProduct = byProduct;
-    }
-
-    // Apply no-cache headers for metrics (frequently changing)
     applyCachingHeaders(res, 'no-cache');
     logRequest(req, 200, Date.now() - startTime);
 
-    return res.status(200).json(createSuccessResponse(metricsBreakdown));
+    return res.status(200).json(createSuccessResponse(metric));
   } catch (error) {
     const duration = Date.now() - startTime;
     logRequest(req, 500, duration, error as Error);

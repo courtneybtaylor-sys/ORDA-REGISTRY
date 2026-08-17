@@ -9,7 +9,8 @@ import {
   createErrorResponse,
   createSuccessResponse,
 } from '@/lib/middleware';
-import type { ComplianceProof, ApiResponse, GateEvaluation } from '@/lib/types';
+import type { ComplianceProof, ApiResponse, GateResults } from '@/lib/types';
+import { summarizeGateResults } from '@/lib/gate-results';
 
 export default async function handler(
   req: NextApiRequest,
@@ -42,11 +43,10 @@ export default async function handler(
       );
     }
 
-    // Fetch testament with all gate evaluations
     const { data: testament, error: testamentError } = await supabase
       .from('testaments')
       .select('*')
-      .eq('id', testamentId)
+      .eq('testament_id', testamentId)
       .single();
 
     if (testamentError || !testament) {
@@ -56,44 +56,12 @@ export default async function handler(
       );
     }
 
-    // Parse gates evaluation
-    let gatesEvaluation: GateEvaluation[] = [];
-    try {
-      if (typeof testament.gates_evaluation === 'string') {
-        gatesEvaluation = JSON.parse(testament.gates_evaluation);
-      } else if (Array.isArray(testament.gates_evaluation)) {
-        gatesEvaluation = testament.gates_evaluation;
-      }
-    } catch (parseError) {
-      console.error('Error parsing gates evaluation:', parseError);
-      gatesEvaluation = [];
-    }
+    const gateResults: GateResults = testament.gate_results || {};
+    const { gatesEvaluated, gatesPassed, gatesFailed } = summarizeGateResults(gateResults);
 
-    // Calculate compliance metrics
-    const gatesPassed = gatesEvaluation.filter(g => g.passed).length;
-    const gatesFailed = gatesEvaluation.filter(g => !g.passed).length;
-    const gatesEvaluated = gatesEvaluation.length;
-
-    // Calculate NIST alignment percentage
-    // NIST alignment is based on: all gates passed + overall score >= 80
-    const nistAlignment = (gatesPassed / Math.max(gatesEvaluated, 1)) * 100;
-
-    // Determine if hardware was verified (hardware_security gate)
-    const hardwareGate = gatesEvaluation.find(g => g.gate === 'hardware_security');
-    const hardwareVerified = hardwareGate?.passed ?? false;
-
-    // Regulatory ready = NIST compliant AND hardware verified
-    const regulatoryReady = testament.nist_compliant && hardwareVerified;
-
-    // Build details map
-    const details: Record<string, any> = {};
-    gatesEvaluation.forEach(gate => {
-      details[gate.gate] = {
-        passed: gate.passed,
-        score: gate.score,
-        details: gate.details,
-      };
-    });
+    const nistAlignment = gatesEvaluated > 0 ? (gatesPassed / gatesEvaluated) * 100 : 0;
+    const hardwareVerified = !!testament.device_did;
+    const regulatoryReady = nistAlignment === 100 && hardwareVerified;
 
     const complianceProof: ComplianceProof = {
       testamentId,
@@ -103,11 +71,10 @@ export default async function handler(
       gatesFailed,
       hardwareVerified,
       regulatoryReady,
-      jurisdiction: testament.jurisdiction || 'Unknown',
-      details,
+      jurisdiction: testament.jurisdiction?.[0] || 'Unknown',
+      gateResults,
     };
 
-    // Apply immutable cache headers for compliance proofs
     applyCachingHeaders(res, 'immutable', 31536000);
     logRequest(req, 200, Date.now() - startTime);
 

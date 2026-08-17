@@ -39,24 +39,16 @@ export default async function handler(
       Math.max(1, (sanitizeParam(req.query.limit, 'number') as number) || 20)
     );
     const jurisdiction = sanitizeParam(req.query.jurisdiction, 'string') as string | null;
-    const status = sanitizeParam(req.query.status, 'string') as string | null;
-    const product = sanitizeParam(req.query.product, 'string') as string | null;
 
     const offset = (pageNum - 1) * limitNum;
 
-    // Build query with filters
-    let query = supabase.from('identities').select('*', { count: 'exact' });
+    let query = supabase
+      .from('operators')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
 
     if (jurisdiction) {
-      query = query.eq('jurisdiction', jurisdiction);
-    }
-
-    if (status && ['active', 'inactive', 'pending'].includes(status)) {
-      query = query.eq('status', status);
-    }
-
-    if (product) {
-      query = query.eq('product', product);
+      query = query.contains('jurisdiction', [jurisdiction]);
     }
 
     const { data, error, count } = await query.range(
@@ -71,23 +63,48 @@ export default async function handler(
       );
     }
 
+    const operators = data || [];
+    const operatorDids = operators.map((op: any) => op.operator_did);
+
+    // Testament counts per operator (single follow-up query, no N+1)
+    const testamentCounts: Record<string, number> = {};
+    if (operatorDids.length > 0) {
+      const { data: testamentRows } = await supabase
+        .from('testaments')
+        .select('operator_did')
+        .in('operator_did', operatorDids);
+
+      (testamentRows || []).forEach((row: any) => {
+        testamentCounts[row.operator_did] = (testamentCounts[row.operator_did] || 0) + 1;
+      });
+    }
+
+    const identities: Identity[] = operators.map((op: any) => ({
+      id: op.id,
+      operatorDid: op.operator_did,
+      name: op.legal_name,
+      jurisdiction: op.jurisdiction?.[0],
+      createdAt: op.created_at,
+      updatedAt: op.updated_at,
+      testamentCount: testamentCounts[op.operator_did] || 0,
+    }));
+
     const totalCount = count || 0;
     const totalPages = Math.ceil(totalCount / limitNum);
 
-    // Apply public cache headers for identities list
     applyCachingHeaders(res, 'public', 300);
     logRequest(req, 200, Date.now() - startTime);
 
     return res.status(200).json(
       createSuccessResponse(
         {
-          items: data || [],
+          items: identities,
           totalCount,
           page: pageNum,
           limit: limitNum,
           totalPages,
         },
-        `Retrieved ${data?.length || 0} identities`
+        `Retrieved ${identities.length} identities`
       )
     );
   } catch (error) {
